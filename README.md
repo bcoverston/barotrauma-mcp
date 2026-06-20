@@ -54,9 +54,11 @@ directory (on macOS, `Barotrauma.app/Contents/MacOS/`). Point your agent there.
 
 ```json
 {
+  "schemaVersion": 1,
   "t": 132.44,
   "roundStarted": true,
   "controlled": "Camille Idris",
+  "autonomy": { "level": "coordinate", "allows": ["ping", "say", "order", "report", "control"] },
   "crew": [
     {
       "name": "Camille Idris", "job": "captain", "isBot": false,
@@ -117,6 +119,12 @@ Verbs:
 - `control <name|job>` — switch the locally-controlled character to a crew member
   (e.g. `control captain`). Direct `Character.Controlled` set; can't take a dead
   character. Acks `{ok, did, target}`.
+
+**Verbs are gated by an autonomy level** (`observe` → `advise` → `coordinate` →
+`pilot` → `override`), set by the operator-owned file `LocalMods/AgentBridgeIO/autonomy`
+— the agent can't raise its own ceiling. Default (no file) is `observe` (read-only);
+a verb above the level acks `ok:false`. The current level + allowed verbs are in
+`state.autonomy`. Full design: [`docs/AUTONOMY.md`](docs/AUTONOMY.md).
 
 ### `ack.json` (mod → agent, after each command)
 

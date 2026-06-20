@@ -29,7 +29,8 @@ local CMD_PATH   = DIR .. "/command"
 local ACK_PATH   = DIR .. "/ack.json"
 -- Sentinel that gates the (footgun) console verb. Created out-of-band by the
 -- operator; no bridge verb writes it, so the agent can't self-enable console.
-local CONSOLE_FLAG = DIR .. "/console.enabled"
+local CONSOLE_FLAG  = DIR .. "/console.enabled"
+local AUTONOMY_FILE = DIR .. "/autonomy"     -- operator-set capability level
 
 local TICK_SECONDS = 0.5   -- wall-clock tick interval, frame-rate independent
 local lastTick     = -1    -- negative so the first frame always ticks
@@ -245,13 +246,45 @@ local function snapshotSub()
   return { fires = fires, leaks = leaks, flooding = flooding, reactor = reactor }
 end
 
+----------------------------------------------------------------------
+-- autonomy levels  (operator-controlled capability ceiling)
+----------------------------------------------------------------------
+-- The agent's authority is gated by a level in the operator-owned file
+-- LocalMods/AgentBridgeIO/autonomy (no bridge verb writes files, so the agent
+-- can't raise its own ceiling). Absent file => the safest tier. See docs/AUTONOMY.md.
+local DEFAULT_LEVEL = "observe"
+local LEVELS     = { observe = 0, advise = 1, coordinate = 2, pilot = 3, override = 4 }
+local LEVEL_NAME = { [0] = "observe", [1] = "advise", [2] = "coordinate", [3] = "pilot", [4] = "override" }
+-- Minimum level each verb requires. Verbs absent here aren't level-gated.
+local VERB_LEVEL = { ping = 0, say = 1, order = 2, report = 2, control = 2, console = 4 }
+local VERB_ORDER = { "ping", "say", "order", "report", "control", "console" }
+
+-- Current level (num, name), read live from the operator file each call.
+local function currentLevel()
+  local name = safe(function()
+    if File.Exists(AUTONOMY_FILE) then
+      return (File.Read(AUTONOMY_FILE) or ""):match("(%a+)")
+    end
+  end, nil)
+  name = name and name:lower() or DEFAULT_LEVEL
+  if LEVELS[name] == nil then name = DEFAULT_LEVEL end
+  return LEVELS[name], name
+end
+
 local function writeState()
+  local lvlNum, lvlName = currentLevel()
+  local allows = {}
+  for _, v in ipairs(VERB_ORDER) do
+    if lvlNum >= VERB_LEVEL[v] then allows[#allows + 1] = v end
+  end
   local state = {
+    schemaVersion = 1,
     t          = safe(function() return math.floor(Timer.GetTime() * 100) / 100 end, 0),
     roundStarted = safe(function() return Game.RoundStarted end, false),
     controlled = safe(function()
                    return Character.Controlled ~= nil and Character.Controlled.Name or "none"
                  end, "none"),
+    autonomy   = { level = lvlName, allows = allows },
     crew       = snapshotCrew(),
     sub        = snapshotSub(),
   }
@@ -463,10 +496,21 @@ local function readAndRunCommand()
   local verb, arg = body:match("^%s*(%S+)%s*\r?\n?(.*)$")
   verb = verb and verb:lower() or ""
 
-  local result = handleCommand(verb, arg)
+  -- Autonomy gate: refuse verbs above the operator-set level (the mod enforces;
+  -- the agent can't escalate itself). Unknown verbs fall through to handleCommand.
+  local lvlNum, lvlName = currentLevel()
+  local need = VERB_LEVEL[verb]
+  local result
+  if need ~= nil and lvlNum < need then
+    result = { ok = false, error = "'" .. verb .. "' needs autonomy level '" ..
+               LEVEL_NAME[need] .. "' (current '" .. lvlName .. "')" }
+  else
+    result = handleCommand(verb, arg)
+  end
   result.seq = seq
+  result.level = lvlName
   safe(function() File.Write(ACK_PATH, jsonEncode(result)) end)
-  print("[AgentBridge] ran '" .. verb .. "' seq=" .. seq .. " ok=" .. tostring(result.ok))
+  print("[AgentBridge] ran '" .. verb .. "' seq=" .. seq .. " ok=" .. tostring(result.ok) .. " lvl=" .. lvlName)
 end
 
 -- Resume across cl_reloadluacs: keep the ack sequence monotonic (a reset to 0
