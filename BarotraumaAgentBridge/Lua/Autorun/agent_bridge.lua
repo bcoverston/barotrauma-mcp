@@ -139,6 +139,107 @@ local function snapshotCrew()
   return crew
 end
 
+-- The reactor Item + its Reactor component on the player sub. operatereactor
+-- needs a concrete target; the hazard snapshot reads the reactor's status.
+local function findReactor()
+  local sub = safe(function() return Submarine.MainSub end, nil)
+  if sub == nil then return nil, nil end
+  local items = safe(function() return sub.GetItems(true) end, nil)
+  if items == nil then return nil, nil end
+  for _, item in pairs(items) do
+    local reactor = safe(function() return item.GetComponentString("Reactor") end, nil)
+    if reactor ~= nil then return item, reactor end
+  end
+  return nil, nil
+end
+
+-- Player-sub hazard snapshot (additive `sub` block). Every game-API read is
+-- safe()-wrapped, degrading to a default (-1 / false / "?") instead of crashing
+-- the round. fires + flooding share one pass over HullList; leaks mirror the
+-- engine's AIObjectiveFixLeaks.IsValidTarget gate so they match what the
+-- `fixleaks` order acts on. Returns nil when there's no sub.
+local function snapshotSub()
+  local sub = safe(function() return Submarine.MainSub end, nil)
+  if sub == nil then return nil end
+
+  local fires, flooding = {}, {}
+  local hulls = safe(function() return Hull.HullList end, nil)
+  if hulls ~= nil then
+    for _, hull in pairs(hulls) do
+      if safe(function() return hull.Submarine == sub end, false) then
+        local room = safe(function() return tostring(hull.DisplayName) end, "?")
+
+        local fs = safe(function() return hull.FireSources end, nil)
+        if fs ~= nil and safe(function() return fs.Count end, 0) > 0 then
+          local maxX = 0
+          for _, f in pairs(fs) do
+            local sx = safe(function() return f.Size.X end, 0)
+            if sx > maxX then maxX = sx end
+          end
+          fires[#fires + 1] = { room = room, size = math.floor(maxX * 10) / 10 }
+        end
+
+        -- WaterPercentage is unclamped (can exceed 100 under pressure); clamp it.
+        local pct = safe(function() return hull.WaterPercentage end, 0)
+        if pct < 0 then pct = 0 elseif pct > 100 then pct = 100 end
+        pct = math.floor(pct + 0.5)
+        if pct > 1 then flooding[#flooding + 1] = { room = room, pct = pct } end
+      end
+    end
+  end
+
+  local leaks = {}
+  local gaps = safe(function() return Gap.GapList end, nil)
+  if gaps ~= nil then
+    for _, gap in pairs(gaps) do
+      local breach = safe(function()
+        return gap.Submarine == sub and gap.ConnectedWall ~= nil
+           and gap.ConnectedDoor == nil and gap.Open > 0
+      end, false)
+      if breach then
+        local room = safe(function()
+          local h = gap.FlowTargetHull
+          if h == nil then
+            for _, e in pairs(gap.linkedTo) do
+              if e ~= nil then h = e; break end
+            end
+          end
+          if h ~= nil and h.DisplayName ~= nil then return tostring(h.DisplayName) end
+          return "outside"
+        end, "?")
+        leaks[#leaks + 1] = {
+          room    = room,
+          open    = safe(function() return math.floor(gap.Open * 100) / 100 end, 0),
+          toOcean = safe(function() return not gap.IsRoomToRoom end, false),
+        }
+      end
+    end
+  end
+
+  -- reactor: nil when the sub has none. meltdown has no public flag — the real
+  -- threshold is private (~Lerp(70,90,skill)); derive conservatively and also
+  -- expose raw temp so the agent can apply its own threshold.
+  local reactor = nil
+  local _, r = findReactor()
+  if r ~= nil then
+    local temp = safe(function() return r.Temperature end, -1)
+    reactor = {
+      temp          = math.floor(temp + 0.5),
+      meltdown      = (temp ~= -1 and temp > 90)
+                        or safe(function() return r.MeltedDownThisRound end, false),
+      fissionRate   = safe(function() return math.floor(r.FissionRate + 0.5) end, -1),
+      turbineOutput = safe(function() return math.floor(r.TurbineOutput + 0.5) end, -1),
+      load          = safe(function() return math.floor(r.Load) end, -1),
+      output        = safe(function() return math.floor(-r.CurrPowerConsumption) end, -1),
+      fuel          = safe(function() return math.floor(r.AvailableFuel) end, -1),
+      autoTemp      = safe(function() return r.AutoTemp end, false),
+      powerOn       = safe(function() return r.PowerOn end, false),
+    }
+  end
+
+  return { fires = fires, leaks = leaks, flooding = flooding, reactor = reactor }
+end
+
 local function writeState()
   local state = {
     t          = safe(function() return math.floor(Timer.GetTime() * 100) / 100 end, 0),
@@ -147,6 +248,7 @@ local function writeState()
                    return Character.Controlled ~= nil and Character.Controlled.Name or "none"
                  end, "none"),
     crew       = snapshotCrew(),
+    sub        = snapshotSub(),
   }
   safe(function() File.Write(STATE_PATH, jsonEncode(state)) end)
 end
@@ -190,20 +292,6 @@ local function findCrew(target)
     end
   end
   return byName or byJob or bySub
-end
-
--- The reactor Item + its Reactor component on the player sub. operatereactor
--- needs a concrete target; most other orders let the bot AI find their own.
-local function findReactor()
-  local sub = safe(function() return Submarine.MainSub end, nil)
-  if sub == nil then return nil, nil end
-  local items = safe(function() return sub.GetItems(true) end, nil)
-  if items == nil then return nil, nil end
-  for _, item in pairs(items) do
-    local reactor = safe(function() return item.GetComponentString("Reactor") end, nil)
-    if reactor ~= nil then return item, reactor end
-  end
-  return nil, nil
 end
 
 -- Issue a crew order: "<orderId> <bot name|job>". force=true bypasses the

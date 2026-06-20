@@ -58,6 +58,17 @@ function printState(s) {
       ` ${c.dead ? "DEAD " : "     "}${pad(c.room ?? "?", 14)} ${c.order ?? "-"}`,
     );
   }
+  const sub = s.sub;
+  if (sub) {
+    const haz = [];
+    if (sub.fires?.length) haz.push(`fires: ${sub.fires.map((f) => f.room).join(", ")}`);
+    if (sub.leaks?.length) haz.push(`leaks: ${sub.leaks.map((l) => l.room + (l.toOcean ? "!" : "")).join(", ")}`);
+    if (sub.flooding?.length) haz.push(`flood: ${sub.flooding.map((f) => `${f.room} ${f.pct}%`).join(", ")}`);
+    const r = sub.reactor;
+    if (r?.meltdown) haz.push("REACTOR MELTDOWN");
+    if (haz.length) console.log(`  ⚠ ${haz.join("  |  ")}`);
+    if (r) console.log(`    reactor ${r.temp}° fission=${r.fissionRate} out=${r.output} fuel=${r.fuel}`);
+  }
 }
 
 function pad(v, n) { return String(v).padEnd(n); }

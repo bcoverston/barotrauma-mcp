@@ -68,9 +68,22 @@ directory (on macOS, `Barotrauma.app/Contents/MacOS/`). Point your agent there.
       "isControlled": false, "health": 71, "bleeding": 2.1,
       "oxygen": 88, "dead": false, "room": "Engine Room", "order": "operatereactor"
     }
-  ]
+  ],
+  "sub": {
+    "fires":    [{ "room": "Engine Room", "size": 23.4 }],
+    "leaks":    [{ "room": "Engine Room", "open": 0.62, "toOcean": true }],
+    "flooding": [{ "room": "Engine Room", "pct": 47 }],
+    "reactor":  { "temp": 78, "meltdown": false, "fissionRate": 80, "turbineOutput": 65,
+                  "load": 4200, "output": 4180, "fuel": 88, "autoTemp": true, "powerOn": true }
+  }
 }
 ```
+
+The `sub` block (additive) reports player-sub hazards: `fires` (per room; `size` =
+fire spread), `leaks` (`open` 0–1; `toOcean` = hull breach to sea vs internal gap),
+`flooding` (`pct` 0–100 per room), and `reactor` (`temp` 0–100; derived `meltdown`;
+`fissionRate`/`turbineOutput`/`load`/`output`/`fuel`; `autoTemp`/`powerOn`). Empty
+arrays mean "none"; `sub` and `reactor` are absent when there's no round/sub/reactor.
 
 ### `command` (agent → mod, line-based, no JSON needed)
 
