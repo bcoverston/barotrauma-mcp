@@ -169,21 +169,23 @@ local function snapshotSub()
       if safe(function() return hull.Submarine == sub end, false) then
         local room = safe(function() return tostring(hull.DisplayName) end, "?")
 
-        local fs = safe(function() return hull.FireSources end, nil)
-        if fs ~= nil and safe(function() return fs.Count end, 0) > 0 then
-          local maxX = 0
-          for _, f in pairs(fs) do
-            local sx = safe(function() return f.Size.X end, 0)
-            if sx > maxX then maxX = sx end
-          end
-          fires[#fires + 1] = { room = room, size = math.floor(maxX * 10) / 10 }
+        -- Active fires. hull.FireCount is a reliable scalar int (= FireSources.Count,
+        -- real fires only). Neither pairs() nor the 0-based list indexer enumerate
+        -- this CLR List<T> in this MoonSharp build (per-fire Size reads back 0), so
+        -- report the fire-source count as the severity proxy instead.
+        local nFires = safe(function() return hull.FireCount end, 0)
+        if nFires > 0 then
+          fires[#fires + 1] = { room = room, count = nFires }
         end
 
         -- WaterPercentage is unclamped (can exceed 100 under pressure); clamp it.
+        -- Skip designer-marked wet rooms (ballast tanks etc.): IsWetRoom means the
+        -- hull is meant to hold water, so its level isn't a flooding emergency.
         local pct = safe(function() return hull.WaterPercentage end, 0)
         if pct < 0 then pct = 0 elseif pct > 100 then pct = 100 end
         pct = math.floor(pct + 0.5)
-        if pct > 1 then flooding[#flooding + 1] = { room = room, pct = pct } end
+        local wet = safe(function() return hull.IsWetRoom end, false)
+        if pct > 1 and not wet then flooding[#flooding + 1] = { room = room, pct = pct } end
       end
     end
   end
@@ -229,7 +231,10 @@ local function snapshotSub()
                         or safe(function() return r.MeltedDownThisRound end, false),
       fissionRate   = safe(function() return math.floor(r.FissionRate + 0.5) end, -1),
       turbineOutput = safe(function() return math.floor(r.TurbineOutput + 0.5) end, -1),
-      load          = safe(function() return math.floor(r.Load) end, -1),
+      -- output = kW generated. (The reactor's separate Load/demand field is a
+      -- property that `new`-shadows a base field, which MoonSharp can't resolve, so
+      -- it's omitted; output is the meaningful "is it producing power" signal and
+      -- tracks served load at steady state.)
       output        = safe(function() return math.floor(-r.CurrPowerConsumption) end, -1),
       fuel          = safe(function() return math.floor(r.AvailableFuel) end, -1),
       autoTemp      = safe(function() return r.AutoTemp end, false),

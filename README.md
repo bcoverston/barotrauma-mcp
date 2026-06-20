@@ -70,19 +70,19 @@ directory (on macOS, `Barotrauma.app/Contents/MacOS/`). Point your agent there.
     }
   ],
   "sub": {
-    "fires":    [{ "room": "Engine Room", "size": 23.4 }],
+    "fires":    [{ "room": "Engine Room", "count": 2 }],
     "leaks":    [{ "room": "Engine Room", "open": 0.62, "toOcean": true }],
     "flooding": [{ "room": "Engine Room", "pct": 47 }],
     "reactor":  { "temp": 78, "meltdown": false, "fissionRate": 80, "turbineOutput": 65,
-                  "load": 4200, "output": 4180, "fuel": 88, "autoTemp": true, "powerOn": true }
+                  "output": 4180, "fuel": 88, "autoTemp": true, "powerOn": true }
   }
 }
 ```
 
-The `sub` block (additive) reports player-sub hazards: `fires` (per room; `size` =
-fire spread), `leaks` (`open` 0–1; `toOcean` = hull breach to sea vs internal gap),
+The `sub` block (additive) reports player-sub hazards: `fires` (per room; `count` =
+number of fire sources), `leaks` (`open` 0–1; `toOcean` = hull breach to sea vs internal gap),
 `flooding` (`pct` 0–100 per room), and `reactor` (`temp` 0–100; derived `meltdown`;
-`fissionRate`/`turbineOutput`/`load`/`output`/`fuel`; `autoTemp`/`powerOn`). Empty
+`fissionRate`/`turbineOutput`/`output`/`fuel`; `autoTemp`/`powerOn`). Empty
 arrays mean "none"; `sub` and `reactor` are absent when there's no round/sub/reactor.
 
 ### `command` (agent → mod, line-based, no JSON needed)
@@ -139,7 +139,10 @@ agent pilots the crew with tool calls instead of poking files:
 - `get_state` — the crew/sub snapshot (with a `_bridge.live` flag).
 - `ping` — liveness; expects `pong`.
 - `say <text>` — the controlled character speaks.
-- `order <orderId> <name|job>` — retask a bot.
+- `order <orderId> <name|job>` — retask a bot (assigned to that bot).
+- `report <breach|fire|intruders>` — crew-wide report; the nearest idle bot self-assigns.
+- `control <name|job>` — take control of a crew member (e.g. the captain).
+- `console <cmd>` — gated debug-console passthrough (`spawnitem`, `fixwalls`, …).
 
 Register it (the bridge dir default already points at the macOS install):
 
@@ -165,23 +168,20 @@ driver works without touching the mod.
 
 ---
 
-## Extending further
+## Status & extending
 
-- **`order`** — ✅ implemented (`Character.SetOrder` + `Order` /
-  `OrderPrefab.Prefabs`, with `force=true` to bypass the hearing-gate). Each crew
-  member's current order is also surfaced in `state.json` as an additive `order`
-  field. See `docs/API_VERIFICATION.md` §4 for the verified API and order ids.
-- **`console`** — ✅ implemented: gated passthrough to `Game.ExecuteCommand` (LuaCs's
-  console wrapper) for `spawnitem`, `fire`, `heal`, … Off unless the operator creates
-  the sentinel `LocalMods/AgentBridgeIO/console.enabled` — no bridge verb writes it, so
-  the agent can't self-enable. Returns void, so `ok` means dispatched, not succeeded;
-  cheat-gated commands need a prior `console enablecheats`.
+All seven capabilities are implemented and verified against a live round
+(LuaCsForBarotrauma, 2026 build): `get_state` (crew + sub hazards), `ping`,
+`say`, `order`, `report`, `control`, and the gated `console`. Every game-API call
+is `pcall`-guarded, so a version mismatch degrades to a default (e.g. `oxygen: -1`)
+rather than crashing the round. The verified API surface — `Speak` signature,
+field names, order ids, hazard reads — is documented in `docs/API_VERIFICATION.md`.
 
-If you'd rather have a symmetric JSON-in contract, swap the line parser in
-`readAndRunCommand()` for a small JSON decoder; the rest is unchanged.
+To extend, the rule is: new capabilities are **new verbs in the Lua**, never the
+agent reaching into the game — preserve that boundary as the command set grows.
+For a symmetric JSON-in contract, swap the line parser in `readAndRunCommand()`
+for a small JSON decoder; nothing else changes.
 
-Two things worth verifying against your installed LuaCs build, since method
-bodies vary slightly by version: the exact `Character.Speak(...)` signature and
-whether `OxygenAvailable` / `Bloodloss` are the field names your version
-exposes. Everything is pcall-guarded, so a mismatch shows up as a default value
-(e.g. `oxygen: -1`) rather than a crash — easy to spot and fix.
+## License
+
+MIT — see [LICENSE](LICENSE).

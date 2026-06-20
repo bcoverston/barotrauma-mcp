@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Agent-side driver for the Barotrauma Agent Bridge file contract (M1 watcher; MCP server next).",
+  "description": "Agent-side driver for the Barotrauma Agent Bridge — a file-bridge watcher and an MCP server (get_state/say/order/console/report/control).",
+  "license": "MIT",
+  "author": "Ben Coverston",
   "bin": {
     "agent-bridge": "src/watch.js",
     "agent-bridge-mcp": "src/mcp-server.js"
