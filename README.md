@@ -1,7 +1,15 @@
 # Agent Bridge (Barotrauma)
 
-The smallest mod that lets an external agent both *observe* and *drive* a
-Barotrauma game. The entire IPC layer is two files on disk.
+Let an external LLM agent **observe and command a Barotrauma submarine crew** —
+coordinating the AI bots through cascading failures (fire + hull breach + reactor
++ flooding) instead of frantically clicking between them.
+
+An in-game [LuaCsForBarotrauma](https://github.com/evilfactory/LuaCsForBarotrauma)
+mod is the sole game authority: it writes game state to disk and runs a small set
+of commands. An [MCP server](#driving-it) exposes that to Claude as native tools
+(`get_state`, `say`, `order`, `report`, `control`, gated `console`), and an
+operator-set **autonomy level** caps what the agent may do. The whole transport is
+a few files on disk — no sockets, no server:
 
 ```
    in-game (Lua mod)                         your machine (agent)
@@ -14,7 +22,9 @@ Barotrauma game. The entire IPC layer is two files on disk.
    └────────────────────┘                    └────────────────────┘
 ```
 
-No sockets, no server. The mod polls; the agent polls. That's it.
+The mod polls; the agent polls. That's it — trivially inspectable (`cat
+state.json`), crash-isolated (either side can restart), and swappable for a socket
+later behind the same contract.
 
 ---
 
@@ -32,10 +42,12 @@ for singleplayer.
 
 1. Copy the `BarotraumaAgentBridge/` folder into your Barotrauma `LocalMods/`
    directory (rename the folder if you like — the name doesn't matter).
-2. Launch the game, open the mod manager, enable **Agent Bridge**, restart.
-3. Start a singleplayer game. In the LuaCs console you should see
+2. Launch the game, open the mod manager, enable **both LuaCsForBarotrauma and
+   Agent Bridge**, restart.
+3. Start a singleplayer game. In the LuaCs console (F3) you should see
    `[AgentBridge] loaded.` and then `ran '...'` lines as commands fire.
-   (You can also type `reloadlua` in the console to re-run scripts after edits.)
+   (Type `cl_reloadluacs` in the console to re-run scripts after edits — fast
+   iteration without restarting the round.)
 
 The IO files appear in `LocalMods/AgentBridgeIO/` under the Barotrauma working
 directory (on macOS, `Barotrauma.app/Contents/MacOS/`). Point your agent there.
@@ -109,8 +121,8 @@ Verbs:
   job. Target-less orders (`fixleaks`, `extinguishfires`, …) let the bot AI find
   its own target; `operatereactor` is item-targeted automatically. Acks
   `{ok, did:"order", order, target}`; unknown order/target acks `ok:false`.
-- `console <cmd>` — gated passthrough to the debug console (`spawnitem`, `fire`,
-  …). Disabled unless the operator creates `LocalMods/AgentBridgeIO/console.enabled`.
+- `console <cmd>` — gated passthrough to the debug console (`spawnitem`, `fixwalls`,
+  `heal`, …). Disabled unless the operator creates `LocalMods/AgentBridgeIO/console.enabled`.
   The console returns void, so an `ok` ack means "dispatched", not "succeeded".
 - `report <breach|fire|intruders>` — crew-wide report (the in-game "Report …"
   buttons): binds no specific bot — the nearest suitable idle bot self-assigns,
@@ -176,19 +188,46 @@ driver works without touching the mod.
 
 ---
 
-## Status & extending
+## Layout
+
+- `BarotraumaAgentBridge/` — the mod; drop it into Barotrauma's `LocalMods/`. The
+  whole thing is `Lua/Autorun/agent_bridge.lua`.
+- `agent/` — host-side driver (Node, ESM): `src/bridge.js` (the file contract),
+  `src/watch.js` (CLI watcher), `src/mcp-server.js` (MCP server).
+- `docs/` — `HANDOFF.md` (original design), `API_VERIFICATION.md` (verified LuaCs
+  APIs), `AUTONOMY.md` (the autonomy ladder).
+
+## Status
 
 All seven capabilities are implemented and verified against a live round
 (LuaCsForBarotrauma, 2026 build): `get_state` (crew + sub hazards), `ping`,
-`say`, `order`, `report`, `control`, and the gated `console`. Every game-API call
-is `pcall`-guarded, so a version mismatch degrades to a default (e.g. `oxygen: -1`)
-rather than crashing the round. The verified API surface — `Speak` signature,
-field names, order ids, hazard reads — is documented in `docs/API_VERIFICATION.md`.
+`say`, `order`, `report`, `control`, and the gated `console`, behind the
+operator-set autonomy ladder. Every game-API call is `pcall`-guarded, so a version
+mismatch degrades to a default (e.g. `oxygen: -1`) rather than crashing the round.
+The verified API surface — `Speak` signature, field names, order ids, hazard reads
+— is documented in `docs/API_VERIFICATION.md`.
 
-To extend, the rule is: new capabilities are **new verbs in the Lua**, never the
-agent reaching into the game — preserve that boundary as the command set grows.
-For a symmetric JSON-in contract, swap the line parser in `readAndRunCommand()`
-for a small JSON decoder; nothing else changes.
+The extension rule: new capabilities are **new verbs in the Lua**, never the agent
+reaching into the game — preserve that boundary as the command set grows.
+
+## Roadmap
+
+The autonomy ladder is built through level `coordinate`; the higher tiers and a few
+extras are specced but unbuilt (details in [`docs/AUTONOMY.md`](docs/AUTONOMY.md)):
+
+- **Richer sensing** — additive `state.json` blocks, available at any level: `nav`
+  (depth/heading/speed), `mission` (objective/state), and `threats` (hostile
+  creatures near the sub).
+- **`pilot` verbs** (autonomy level `pilot`): `steer`, `setdepth`, `reactor` — fly
+  the sub itself, not just direct the crew. Need the verify-against-source pass first.
+- **Per-fire size** — fires report a `count` today; a per-fire size needs the CLR-list
+  enumerator form that `pairs`/indexing don't provide in this MoonSharp build.
+- **Symmetric JSON-in** — swap the line-based `command` parser for a JSON decoder.
+- **Cross-platform paths** — the bridge-dir default targets macOS Steam; set
+  `BRIDGE_DIR` for Windows/Linux (the contract is identical).
+- **Autonomous driver loop** — the agent acts per-turn today; a continuous
+  `get_state → decide → act` loop would make it self-driving (the MCP server
+  already supports it).
 
 ## License
 
