@@ -149,6 +149,23 @@ was consumed.
 
 ---
 
+## Scope
+
+The bridge drives **in-round crew orchestration** — the moment-to-moment order /
+report system the game already has. It does **not** touch campaign / roster
+management.
+
+- **In scope:** assigning live tasks to the crew (`order` / `report`, via
+  `Character.SetOrder` and the report system) — operate the reactor, fix leaks,
+  extinguish fires, and so on. You pick the task and target; the bots' AI does the
+  work, and their job/skill determines how well. Plus reading full crew + sub
+  state, talking, body-swapping (`control`), and the gated `console`.
+- **Out of scope:** hiring/firing, the crew roster, or changing a character's job,
+  skills, or talents — that's between-rounds campaign management, a separate game
+  system. The bridge only *reads* each member's `job`, to target orders by role.
+
+In short: a **crisis co-pilot**, not a campaign manager.
+
 ## Driving it
 
 ### MCP server (recommended)
