@@ -4,6 +4,7 @@
 //   node src/watch.js ping            → send a command, wait for its ack
 //   node src/watch.js say "moving up"  → speak as the controlled character
 //   node src/watch.js order "operatereactor Keneth"  → order a bot (id then name/job)
+//   node src/watch.js console "spawnitem crowbar cursor"  → debug console (gated; see README)
 import { existsSync } from "node:fs";
 import {
   BRIDGE_DIR, STATE_PATH, readState, readAck, writeCommand, waitForAck, sleep,

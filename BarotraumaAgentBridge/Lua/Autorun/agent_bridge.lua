@@ -27,6 +27,9 @@ local DIR        = "LocalMods/AgentBridgeIO"
 local STATE_PATH = DIR .. "/state.json"
 local CMD_PATH   = DIR .. "/command"
 local ACK_PATH   = DIR .. "/ack.json"
+-- Sentinel that gates the (footgun) console verb. Created out-of-band by the
+-- operator; no bridge verb writes it, so the agent can't self-enable console.
+local CONSOLE_FLAG = DIR .. "/console.enabled"
 
 local TICK_SECONDS = 0.5   -- wall-clock tick interval, frame-rate independent
 local lastTick     = -1    -- negative so the first frame always ticks
@@ -246,6 +249,24 @@ local function handleOrder(arg)
   }
 end
 
+-- Gated passthrough to the debug console via Game.ExecuteCommand (LuaCs's
+-- wrapper; the raw DebugConsole isn't a Lua global). OFF unless the operator
+-- creates the sentinel file (CONSOLE_FLAG) — no bridge verb writes it, so the
+-- agent can't self-enable. ExecuteCommand returns void, so a true ack means
+-- "dispatched without a Lua error", not "the command succeeded". Cheat-gated
+-- commands (spawnitem, fire, …) need a prior `console enablecheats`.
+local function handleConsole(arg)
+  if not safe(function() return File.Exists(CONSOLE_FLAG) end, false) then
+    return { ok = false, error = "console disabled — create " .. CONSOLE_FLAG .. " to enable" }
+  end
+  local cmd = tostring(arg or "")
+  if cmd == "" then return { ok = false, error = "usage: console <command line>" } end
+  local ran, err = pcall(function() Game.ExecuteCommand(cmd) end)
+  if not ran then return { ok = false, error = "exec: " .. tostring(err) } end
+  return { ok = true, did = "console", cmd = cmd,
+           note = "dispatched (console returns no value to confirm success)" }
+end
+
 local function handleCommand(verb, arg)
   if verb == "ping" then
     return { ok = true, did = "pong" }
@@ -262,10 +283,12 @@ local function handleCommand(verb, arg)
   elseif verb == "order" then
     return handleOrder(arg)
 
+  elseif verb == "console" then
+    return handleConsole(arg)
+
   else
     return { ok = false, error = "unknown verb: " .. tostring(verb) }
   end
-  -- NEXT VERB (see README): "console" via DebugConsole.ExecuteCommand, gated.
 end
 
 local function readAndRunCommand()

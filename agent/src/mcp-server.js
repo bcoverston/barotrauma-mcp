@@ -87,4 +87,17 @@ server.registerTool("order", {
   },
 }, async ({ order, target }) => sendCommand("order", `${order} ${target}`));
 
+server.registerTool("console", {
+  title: "Run a debug console command (gated)",
+  description:
+    "Passthrough to Barotrauma's debug console (e.g. `spawnitem crowbar cursor`, `fire`, " +
+    "`heal`). GATED: the mod refuses this unless the operator has created the sentinel file " +
+    "LocalMods/AgentBridgeIO/console.enabled. The console returns no value, so a successful ack " +
+    "means the command was dispatched without error, not that it took effect. Powerful and easy " +
+    "to footgun — prefer say/order for normal play.",
+  inputSchema: {
+    command: z.string().min(1).describe("Full console command line, e.g. 'spawnitem crowbar cursor'."),
+  },
+}, async ({ command }) => sendCommand("console", command));
+
 await server.connect(new StdioServerTransport());

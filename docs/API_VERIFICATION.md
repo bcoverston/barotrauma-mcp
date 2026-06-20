@@ -118,10 +118,13 @@ end, "none")
 For hull/leak orders, construct target-less:
 `Order(OrderPrefab.Prefabs["fixleaks"], hull, nil)` and let the bot AI find leaks.
 
-**Console shape.** `DebugConsole.ExecuteCommand(string)` — shared (client + server),
-takes the full command line, returns `void`. Gate behind a local `CONSOLE_ENABLED`
-flag (default false). Because it returns void, the ack can only assert "dispatched
-without a Lua error," not "command succeeded." Some commands need cheats/debug mode.
+**Console shape.** Call `Game.ExecuteCommand(string)` — LuaCs's wrapper over
+`DebugConsole.ExecuteCommand` (`LuaGame.cs:402`); the raw `DebugConsole` is **not** a
+Lua global (it throws "index a nil value"), so go through `Game`. Returns `void`, so the
+ack only asserts "dispatched without a Lua error," not "succeeded." Cheat-gated commands
+(`spawnitem`, `fire`, …) need a prior `Game.ExecuteCommand("enablecheats")`. The mod
+gates the verb behind the sentinel file `LocalMods/AgentBridgeIO/console.enabled`
+(default off), not a code flag.
 
 ## 5. Open uncertainties (check in-game)
 

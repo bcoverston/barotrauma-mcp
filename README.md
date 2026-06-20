@@ -94,6 +94,9 @@ Verbs:
   job. Target-less orders (`fixleaks`, `extinguishfires`, …) let the bot AI find
   its own target; `operatereactor` is item-targeted automatically. Acks
   `{ok, did:"order", order, target}`; unknown order/target acks `ok:false`.
+- `console <cmd>` — gated passthrough to the debug console (`spawnitem`, `fire`,
+  …). Disabled unless the operator creates `LocalMods/AgentBridgeIO/console.enabled`.
+  The console returns void, so an `ok` ack means "dispatched", not "succeeded".
 
 ### `ack.json` (mod → agent, after each command)
 
@@ -148,9 +151,11 @@ driver works without touching the mod.
   `OrderPrefab.Prefabs`, with `force=true` to bypass the hearing-gate). Each crew
   member's current order is also surfaced in `state.json` as an additive `order`
   field. See `docs/API_VERIFICATION.md` §4 for the verified API and order ids.
-- **`console <cmd>`** — the next verb: run a Barotrauma console command for broad
-  reach (`heal`, `spawnitem`, etc.) via `DebugConsole.ExecuteCommand`, gated
-  behind a flag — powerful and easy to footgun.
+- **`console`** — ✅ implemented: gated passthrough to `Game.ExecuteCommand` (LuaCs's
+  console wrapper) for `spawnitem`, `fire`, `heal`, … Off unless the operator creates
+  the sentinel `LocalMods/AgentBridgeIO/console.enabled` — no bridge verb writes it, so
+  the agent can't self-enable. Returns void, so `ok` means dispatched, not succeeded;
+  cheat-gated commands need a prior `console enablecheats`.
 
 If you'd rather have a symmetric JSON-in contract, swap the line parser in
 `readAndRunCommand()` for a small JSON decoder; the rest is unchanged.
