@@ -1,0 +1,11 @@
+{
+  "name": "barotrauma-agent-bridge-driver",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent-side driver for the Barotrauma Agent Bridge file contract (M1 watcher; MCP server next).",
+  "bin": { "agent-bridge": "src/watch.js" },
+  "scripts": {
+    "watch": "node src/watch.js"
+  }
+}

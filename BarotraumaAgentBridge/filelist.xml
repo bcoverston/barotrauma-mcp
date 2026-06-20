@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<contentpackage name="Agent Bridge" modversion="0.1.0" corepackage="false">
+  <!--
+    Lua-only mod. No XML content items are required; LuaCsForBarotrauma
+    auto-discovers and runs everything under Lua/Autorun/ when this
+    package is enabled. The package just needs a valid filelist.xml.
+  -->
+</contentpackage>

@@ -1,0 +1,16 @@
+# OS / editor
+.DS_Store
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Runtime bridge IO (generated inside the game directory)
+/AgentBridge/
