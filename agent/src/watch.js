@@ -3,6 +3,7 @@
 //   node src/watch.js                 → watch state.json, print crew on change
 //   node src/watch.js ping            → send a command, wait for its ack
 //   node src/watch.js say "moving up"  → speak as the controlled character
+//   node src/watch.js order "operatereactor Keneth"  → order a bot (id then name/job)
 import { existsSync } from "node:fs";
 import {
   BRIDGE_DIR, STATE_PATH, readState, readAck, writeCommand, waitForAck, sleep,
@@ -53,7 +54,7 @@ function printState(s) {
     console.log(
       `  ${c.isControlled ? "*" : " "} ${pad(c.name, 18)} ${pad(c.job, 10)}` +
       ` hp=${pad3(c.health)} o2=${pad3(c.oxygen)} bleed=${pad(c.bleeding, 4)}` +
-      ` ${c.dead ? "DEAD " : "     "}${c.room ?? "?"}`,
+      ` ${c.dead ? "DEAD " : "     "}${pad(c.room ?? "?", 14)} ${c.order ?? "-"}`,
     );
   }
 }

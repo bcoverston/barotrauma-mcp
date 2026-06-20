@@ -97,6 +97,15 @@ end
 -- state snapshot  (the observability half)
 ----------------------------------------------------------------------
 
+-- Top-priority order identifier for a character, or "none". The engine's
+-- GetCurrentOrderWithTopPriority() already skips dismissed/priority<1 orders.
+local function currentOrderId(ch)
+  return safe(function()
+    local o = ch.GetCurrentOrderWithTopPriority()
+    return o ~= nil and tostring(o.Identifier) or "none"
+  end, "none")
+end
+
 local function snapshotCrew()
   local crew = {}
   local list = Character.CharacterList
@@ -120,6 +129,7 @@ local function snapshotCrew()
                           end
                           return "outside"
                         end, "?"),
+        order        = currentOrderId(ch),
       }
     end
   end
@@ -149,8 +159,92 @@ end
 --   say
 --   Reactor is climbing, I'm heading to engineering.
 --
+--   order
+--   operatereactor Bjorn Vade      (order id first, then bot name or job)
+--
 -- Dedup is by exact file contents. To re-issue an identical command,
 -- change the file at all (e.g. append a trailing "# 2").
+
+-- Find an alive, on-player-team human by exact name, then exact job, then a
+-- name substring. Bot names contain spaces, so the order grammar puts the
+-- single-token order id first and treats the rest of the line as the target.
+local function findCrew(target)
+  if target == nil or target == "" then return nil end
+  local want = target:lower()
+  local list = safe(function() return Character.CharacterList end, nil)
+  if list == nil then return nil end
+  local byName, byJob, bySub
+  for _, ch in pairs(list) do
+    local match = safe(function()
+      return ch.IsOnPlayerTeam and ch.IsHuman and not ch.IsDead
+    end, false)
+    if match then
+      local name = safe(function() return tostring(ch.Name) end, ""):lower()
+      local job  = safe(function() return tostring(ch.JobIdentifier) end, ""):lower()
+      if name == want and byName == nil then byName = ch end
+      if job  == want and byJob  == nil then byJob  = ch end
+      if bySub == nil and name:find(want, 1, true) then bySub = ch end
+    end
+  end
+  return byName or byJob or bySub
+end
+
+-- The reactor Item + its Reactor component on the player sub. operatereactor
+-- needs a concrete target; most other orders let the bot AI find their own.
+local function findReactor()
+  local sub = safe(function() return Submarine.MainSub end, nil)
+  if sub == nil then return nil, nil end
+  local items = safe(function() return sub.GetItems(true) end, nil)
+  if items == nil then return nil, nil end
+  for _, item in pairs(items) do
+    local reactor = safe(function() return item.GetComponentString("Reactor") end, nil)
+    if reactor ~= nil then return item, reactor end
+  end
+  return nil, nil
+end
+
+-- Issue a crew order: "<orderId> <bot name|job>". force=true bypasses the
+-- SetOrder hearing-gate so distant bots still obey; manual priority makes the
+-- bot act now instead of deferring to its autonomous objectives.
+local function handleOrder(arg)
+  local orderId, target = tostring(arg or ""):match("^%s*(%S+)%s*(.-)%s*$")
+  orderId = orderId and orderId:lower() or ""
+  if orderId == "" then
+    return { ok = false, error = "usage: order <orderId> <bot name|job>" }
+  end
+
+  local prefab = safe(function() return OrderPrefab.Prefabs[orderId] end, nil)
+  if prefab == nil then return { ok = false, error = "unknown order: " .. orderId } end
+
+  local bot = findCrew(target)
+  if bot == nil then
+    return { ok = false, error = "no crew matches '" .. tostring(target) .. "'" }
+  end
+
+  -- reactor is target-specific; everything else is constructed target-less.
+  local built, order = pcall(function()
+    if orderId == "operatereactor" then
+      local item, comp = findReactor()
+      if item == nil then error("no reactor found on the sub") end
+      return Order(prefab, "powerup", item, comp)
+    end
+    return Order(prefab, nil, nil)
+  end)
+  if not built then return { ok = false, error = "build: " .. tostring(order) } end
+
+  -- best-effort manual priority; don't fail the order if the call is absent.
+  order = safe(function()
+    return order.WithManualPriority(CharacterInfo.HighestManualOrderPriority)
+  end, order)
+
+  local set, err = pcall(function() bot.SetOrder(order, true, true, true) end)
+  if not set then return { ok = false, error = "setorder: " .. tostring(err) } end
+
+  return {
+    ok = true, did = "order", order = orderId,
+    target = safe(function() return tostring(bot.Name) end, "?"),
+  }
+end
 
 local function handleCommand(verb, arg)
   if verb == "ping" then
@@ -165,11 +259,13 @@ local function handleCommand(verb, arg)
     end, false)
     return { ok = said, did = "say", text = tostring(arg or "") }
 
+  elseif verb == "order" then
+    return handleOrder(arg)
+
   else
     return { ok = false, error = "unknown verb: " .. tostring(verb) }
   end
-  -- NEXT VERBS (see README): "order" via Character.SetOrder, "console"
-  -- via DebugConsole.ExecuteCommand. Left out of v0 to keep it minimal.
+  -- NEXT VERB (see README): "console" via DebugConsole.ExecuteCommand, gated.
 end
 
 local function readAndRunCommand()
@@ -190,6 +286,19 @@ local function readAndRunCommand()
   safe(function() File.Write(ACK_PATH, jsonEncode(result)) end)
   print("[AgentBridge] ran '" .. verb .. "' seq=" .. seq .. " ok=" .. tostring(result.ok))
 end
+
+-- Resume across cl_reloadluacs: keep the ack sequence monotonic (a reset to 0
+-- would make the watcher's "wait for seq to advance" hang on the next command),
+-- and treat the command file already on disk as consumed so a reload doesn't
+-- replay the last command.
+seq = safe(function()
+  local raw = (File.Exists(ACK_PATH) and File.Read(ACK_PATH)) or ""
+  local n = raw:match('"seq"%s*:%s*(%d+)')
+  return n and tonumber(n) or 0
+end, 0)
+lastCmdRaw = safe(function()
+  return (File.Exists(CMD_PATH) and File.Read(CMD_PATH)) or nil
+end, nil)
 
 ----------------------------------------------------------------------
 -- tick loop

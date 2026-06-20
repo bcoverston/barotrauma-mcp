@@ -61,12 +61,12 @@ directory (on macOS, `Barotrauma.app/Contents/MacOS/`). Point your agent there.
     {
       "name": "Camille Idris", "job": "captain", "isBot": false,
       "isControlled": true, "health": 100, "bleeding": 0,
-      "oxygen": 100, "dead": false, "room": "Command"
+      "oxygen": 100, "dead": false, "room": "Command", "order": "none"
     },
     {
       "name": "Bjorn Vade", "job": "engineer", "isBot": true,
       "isControlled": false, "health": 71, "bleeding": 2.1,
-      "oxygen": 88, "dead": false, "room": "Engine Room"
+      "oxygen": 88, "dead": false, "room": "Engine Room", "order": "operatereactor"
     }
   ]
 }
@@ -84,9 +84,14 @@ Reactor is climbing — moving to engineering.
 Deduped on exact file contents: the mod runs each distinct command once. To
 re-issue an identical command, change the file at all (e.g. append `# 2`).
 
-Verbs in v0:
+Verbs:
 - `ping` — liveness check; acks `pong`.
 - `say <text>` — the currently controlled character speaks `<text>` in game.
+- `order <orderId> <bot name|job>` — issue a crew order to a bot. The order id
+  is the first token; the rest of the line is the target, resolved by name or
+  job. Target-less orders (`fixleaks`, `extinguishfires`, …) let the bot AI find
+  its own target; `operatereactor` is item-targeted automatically. Acks
+  `{ok, did:"order", order, target}`; unknown order/target acks `ok:false`.
 
 ### `ack.json` (mod → agent, after each command)
 
@@ -116,17 +121,15 @@ dead simple, so you can grow the agent without touching the mod much.
 
 ---
 
-## Extending past v0
+## Extending further
 
-The two highest-value next verbs, with the APIs to use:
-
-- **`order <job-ish>`** — issue a real crew order to a bot. Look at
-  `Character.SetOrder`, `Character.GetCurrentOrder`, and the `Order` /
-  `OrderPrefab.Prefabs` types. This is the "declaratively retask the bots"
-  capability we actually want; it's just more API surface than v0 needed.
-- **`console <cmd>`** — run a Barotrauma console command for broad reach
-  (`heal`, `spawnitem`, etc.). Route through `DebugConsole.ExecuteCommand` and
-  gate it behind a flag — it's powerful and easy to footgun.
+- **`order`** — ✅ implemented (`Character.SetOrder` + `Order` /
+  `OrderPrefab.Prefabs`, with `force=true` to bypass the hearing-gate). Each crew
+  member's current order is also surfaced in `state.json` as an additive `order`
+  field. See `docs/API_VERIFICATION.md` §4 for the verified API and order ids.
+- **`console <cmd>`** — the next verb: run a Barotrauma console command for broad
+  reach (`heal`, `spawnitem`, etc.) via `DebugConsole.ExecuteCommand`, gated
+  behind a flag — powerful and easy to footgun.
 
 If you'd rather have a symmetric JSON-in contract, swap the line parser in
 `readAndRunCommand()` for a small JSON decoder; the rest is unchanged.
