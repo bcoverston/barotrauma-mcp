@@ -355,6 +355,63 @@ local function handleConsole(arg)
            note = "dispatched (console returns no value to confirm success)" }
 end
 
+-- Crew-wide report ("reportbreach"/"reportfire"/"reportintruders", or the short
+-- breach/fire/intruders): unlike `order`, this binds no specific bot — it posts
+-- to the crew and the nearest suitable IDLE bot self-assigns (the in-game
+-- "Report …" buttons). The reporter is the controlled character and must be
+-- inside the sub (the report's hull comes from its CurrentHull).
+local REPORT_ALIAS = {
+  breach = "reportbreach", leak = "reportbreach", water = "reportbreach",
+  fire = "reportfire", intruders = "reportintruders", intruder = "reportintruders",
+}
+local function handleReport(arg)
+  local id = tostring(arg or ""):match("^%s*(%S+)")
+  id = id and id:lower() or ""
+  id = REPORT_ALIAS[id] or id
+  local prefab = safe(function() return OrderPrefab.Prefabs[id] end, nil)
+  if prefab == nil then return { ok = false, error = "unknown report: " .. id } end
+
+  local reporter = Character.Controlled
+  if reporter == nil then return { ok = false, error = "no controlled character to report" } end
+  local hull = safe(function() return reporter.CurrentHull end, nil)
+  if hull == nil then return { ok = false, error = "reporter isn't inside the sub" } end
+
+  local cm = safe(function() return Game.GameSession.CrewManager end, nil)
+  if cm == nil then return { ok = false, error = "no CrewManager (round not running?)" } end
+
+  -- Build like the report button (hull-targeted, orderGiver = reporter), then
+  -- post crew-wide with a nil character so a suitable idle bot self-assigns.
+  local built, order = pcall(function()
+    return Order(prefab, hull, nil).WithOrderGiver(reporter)
+  end)
+  if not built then return { ok = false, error = "build: " .. tostring(order) } end
+
+  local posted, err = pcall(function() cm.SetCharacterOrder(nil, order) end)
+  if not posted then return { ok = false, error = "report: " .. tostring(err) } end
+  return { ok = true, did = "report", report = id,
+           reporter = safe(function() return tostring(reporter.Name) end, "?") }
+end
+
+-- Switch the locally-controlled character to a named/job-resolved crew member
+-- (the `control` console command's behaviour: a direct Character.Controlled set,
+-- no cheats). Falls back to the console command if the setter is unavailable.
+local function handleControl(arg)
+  local target = findCrew(arg)
+  if target == nil then return { ok = false, error = "no crew matches '" .. tostring(arg) .. "'" } end
+  if safe(function() return target.IsDead end, false) then
+    return { ok = false, error = "cannot control a dead character" }
+  end
+  local set = safe(function() Character.Controlled = target; return true end, false)
+  if not set then
+    safe(function() Game.ExecuteCommand("control " .. tostring(target.Name)) end)
+  end
+  return {
+    ok = safe(function() return Character.Controlled == target end, false),
+    did = "control",
+    target = safe(function() return tostring(target.Name) end, "?"),
+  }
+end
+
 local function handleCommand(verb, arg)
   if verb == "ping" then
     return { ok = true, did = "pong" }
@@ -373,6 +430,12 @@ local function handleCommand(verb, arg)
 
   elseif verb == "console" then
     return handleConsole(arg)
+
+  elseif verb == "report" then
+    return handleReport(arg)
+
+  elseif verb == "control" then
+    return handleControl(arg)
 
   else
     return { ok = false, error = "unknown verb: " .. tostring(verb) }

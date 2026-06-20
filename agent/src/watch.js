@@ -4,6 +4,8 @@
 //   node src/watch.js ping            → send a command, wait for its ack
 //   node src/watch.js say "moving up"  → speak as the controlled character
 //   node src/watch.js order "operatereactor Keneth"  → order a bot (id then name/job)
+//   node src/watch.js report fire                    → crew-wide report (nearest idle bot responds)
+//   node src/watch.js control captain                → switch control to a crew member
 //   node src/watch.js console "spawnitem crowbar cursor"  → debug console (gated; see README)
 import { existsSync } from "node:fs";
 import {

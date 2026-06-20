@@ -110,6 +110,13 @@ Verbs:
 - `console <cmd>` — gated passthrough to the debug console (`spawnitem`, `fire`,
   …). Disabled unless the operator creates `LocalMods/AgentBridgeIO/console.enabled`.
   The console returns void, so an `ok` ack means "dispatched", not "succeeded".
+- `report <breach|fire|intruders>` — crew-wide report (the in-game "Report …"
+  buttons): binds no specific bot — the nearest suitable idle bot self-assigns,
+  routing more surgically than a blanket order. Reporter is the controlled
+  character, reporting from its current room. Acks `{ok, did, report, reporter}`.
+- `control <name|job>` — switch the locally-controlled character to a crew member
+  (e.g. `control captain`). Direct `Character.Controlled` set; can't take a dead
+  character. Acks `{ok, did, target}`.
 
 ### `ack.json` (mod → agent, after each command)
 

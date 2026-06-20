@@ -100,4 +100,27 @@ server.registerTool("console", {
   },
 }, async ({ command }) => sendCommand("console", command));
 
+server.registerTool("report", {
+  title: "Report a problem to the crew",
+  description:
+    "Issue a crew-wide REPORT (like the in-game 'Report …' buttons). Unlike `order`, it binds no " +
+    "specific bot — the nearest suitable idle bot self-assigns, which routes more surgically than a " +
+    "blanket order. The reporter is the player-controlled character (must be inside the sub). " +
+    "what ∈ breach | fire | intruders (aliases for reportbreach / reportfire / reportintruders).",
+  inputSchema: {
+    what: z.string().min(1).describe("What to report: breach (hull/water), fire, or intruders."),
+  },
+}, async ({ what }) => sendCommand("report", what));
+
+server.registerTool("control", {
+  title: "Take control of a crew member",
+  description:
+    "Switch the locally-controlled character to a named or job-resolved crew member (e.g. take the " +
+    "captain). Afterwards `say` speaks as them and `report` reports from their location. Resolves by " +
+    "name (e.g. 'Sara') or job (e.g. 'captain'); can't control a dead character.",
+  inputSchema: {
+    target: z.string().min(1).describe("Crew member to control: a name or job."),
+  },
+}, async ({ target }) => sendCommand("control", target));
+
 await server.connect(new StdioServerTransport());
