@@ -278,7 +278,10 @@ local function readAndRunCommand()
   lastCmdRaw = raw
   seq = seq + 1
 
-  local verb, arg = raw:match("^%s*(%S+)%s*\r?\n?(.*)$")
+  -- An optional leading "@<nonce>" line exists only to make otherwise-identical
+  -- commands distinct on disk (so they aren't deduped); strip it before parsing.
+  local body = raw:gsub("^@[^\n]*\r?\n", "", 1)
+  local verb, arg = body:match("^%s*(%S+)%s*\r?\n?(.*)$")
   verb = verb and verb:lower() or ""
 
   local result = handleCommand(verb, arg)

@@ -82,7 +82,9 @@ Reactor is climbing — moving to engineering.
 ```
 
 Deduped on exact file contents: the mod runs each distinct command once. To
-re-issue an identical command, change the file at all (e.g. append `# 2`).
+re-issue an identical command, change the file — drivers prepend an optional
+`@<nonce>` first line (which the mod strips before parsing the verb) so repeated
+`say`/`order` commands aren't swallowed.
 
 Verbs:
 - `ping` — liveness check; acks `pong`.
@@ -104,20 +106,39 @@ was consumed.
 
 ---
 
-## Driving it from Claude Code
+## Driving it
 
-Drop a Claude Code agent in the `AgentBridge/` folder (a `CLAUDE.md` with the
-protocol is included) and the loop is just:
+### MCP server (recommended)
 
-1. Read `state.json`.
-2. Reason about the crew/sub.
-3. Write a `command` file.
-4. Read `ack.json` to confirm `seq` advanced.
-5. Repeat.
+`agent/src/mcp-server.js` exposes the bridge to Claude as native MCP tools, so an
+agent pilots the crew with tool calls instead of poking files:
 
-A bare-bones watcher in any language is ~15 lines: poll `state.json`, on change
-print it / decide, write `command`. The point of v0 is that the *contract* is
-dead simple, so you can grow the agent without touching the mod much.
+- `get_state` — the crew/sub snapshot (with a `_bridge.live` flag).
+- `ping` — liveness; expects `pong`.
+- `say <text>` — the controlled character speaks.
+- `order <orderId> <name|job>` — retask a bot.
+
+Register it (the bridge dir default already points at the macOS install):
+
+```sh
+claude mcp add barotrauma -- node "$PWD/agent/src/mcp-server.js"   # Claude Code
+```
+
+or in Claude Desktop's `claude_desktop_config.json`:
+
+```json
+{ "mcpServers": { "barotrauma": { "command": "node",
+    "args": ["/abs/path/to/agent/src/mcp-server.js"] } } }
+```
+
+`npm install` in `agent/` first (deps: `@modelcontextprotocol/sdk`, `zod`).
+
+### CLI watcher (no MCP)
+
+`agent/src/watch.js` is a dependency-free poller over the same contract — `watch`
+prints the crew on change; `ping`/`say`/`order` round-trip a command. Good for a
+first end-to-end proof or scripting. The *contract* is just the files, so either
+driver works without touching the mod.
 
 ---
 

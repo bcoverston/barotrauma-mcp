@@ -4,8 +4,17 @@
   "private": true,
   "type": "module",
   "description": "Agent-side driver for the Barotrauma Agent Bridge file contract (M1 watcher; MCP server next).",
-  "bin": { "agent-bridge": "src/watch.js" },
+  "bin": {
+    "agent-bridge": "src/watch.js",
+    "agent-bridge-mcp": "src/mcp-server.js"
+  },
   "scripts": {
-    "watch": "node src/watch.js"
+    "watch": "node src/watch.js",
+    "mcp": "node src/mcp-server.js",
+    "smoke-mcp": "node scripts/mcp-smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
   }
 }

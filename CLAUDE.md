@@ -7,9 +7,11 @@ for the full design and `README.md` for install + the file contract.
 ## Layout
 - `BarotraumaAgentBridge/` — the mod. Drop this folder into Barotrauma's `LocalMods/`.
   - `filelist.xml` — content package manifest (near-empty; LuaCs auto-runs `Lua/Autorun/`).
-  - `Lua/Autorun/agent_bridge.lua` — the entire v0 mod: tick loop, JSON state writer,
-    line-based command reader with dedup + ack.
-- `docs/` — design notes (`HANDOFF.md`, verified API facts).
+  - `Lua/Autorun/agent_bridge.lua` — the entire mod: tick loop, JSON state writer,
+    line-based command reader (verbs `ping`/`say`/`order`) with dedup + ack.
+- `agent/` — host-side driver (Node, ESM). `src/bridge.js` is the file contract;
+  `src/watch.js` the CLI watcher; `src/mcp-server.js` the MCP server.
+- `docs/` — design notes (`HANDOFF.md`, `API_VERIFICATION.md`).
 
 ## The boundary (do not cross)
 The **mod is the sole authority on game state and the only thing allowed to call
@@ -32,4 +34,5 @@ in the LuaCs console to re-run scripts without restarting the round — use it f
 iteration. `[AgentBridge] loaded.` in the console confirms load.
 
 ## Build phases (see HANDOFF §6)
-- M0 prove the loop (in-game) · M1 agent driver · M2 `order` verb · M3 `console` verb (gated).
+- ✅ M0 prove the loop · ✅ M1 driver · ✅ M2 `order` verb · ✅ MCP server ·
+  M3 `console` verb (gated `DebugConsole.ExecuteCommand`, default-off) — next.

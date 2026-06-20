@@ -32,8 +32,15 @@ export const readState = () => readJSON(STATE_PATH);
 export const readAck = () => readJSON(ACK_PATH);
 
 // The mod's grammar: first line is the verb, everything after is the argument.
+// We prepend a unique "@<nonce>" line so otherwise-identical commands are still
+// distinct on disk — the mod keys its dedup on exact file contents and strips
+// this line before parsing. Without it, re-issuing the same say/order silently
+// no-ops (the mod sees identical content and produces no fresh ack).
+let cmdNonce = 0;
 export function writeCommand(verb, arg = "") {
-  writeFileSync(CMD_PATH, arg ? `${verb}\n${arg}` : `${verb}\n`);
+  const tag = `@${Date.now()}.${cmdNonce++}`;
+  const body = arg ? `${verb}\n${arg}` : `${verb}\n`;
+  writeFileSync(CMD_PATH, `${tag}\n${body}`);
 }
 
 // Resolve once the ack seq advances past `fromSeq`; null on timeout.
